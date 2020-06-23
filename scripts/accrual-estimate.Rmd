@@ -1,0 +1,58 @@
+---
+title: "accrual-estimation"
+author: "Daniel Spakowicz"
+date: "6/23/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r create df}
+# Update on accrual progress
+today.date = as.Date("2020-06-20")
+today.accrual = 53
+
+# Create a vector of months from this update to the end of the funding period
+trial.dates <- seq.Date(from = today.date, 
+         to = as.Date("2022-12-31"),
+         by = "month")
+
+# Set the accrual rate (direct communication from David Carbone)
+acc.rate <- 5
+
+# Propagate the accrual from today throughout the rest of the study window
+lengthvec <- 1:length(trial.dates)
+on.insigna <- today.accrual + ((lengthvec - 1) * 5)
+
+# Define a consent rate
+consent.rate <- 0.9
+
+df <- data.frame(
+  Date = trial.dates,
+  insigna = on.insigna,
+  modbio = ceiling(
+    on.insigna * consent.rate
+  )
+)
+
+```
+
+```{r}
+df %>%
+  gather(key = "Trial", value = "Accrued", -Date) %>%
+  ggplot(aes(x = Date, y = Accrued)) +
+  geom_line(aes(color = Trial)) +
+  theme_bw() +
+  ggsave("../figures/accrual-timing.png", height = 3, width = 4)
+```
+
