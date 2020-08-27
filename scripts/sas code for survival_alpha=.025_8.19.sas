@@ -13,8 +13,8 @@ proc power;
       power = 0.8;
 run;
 
-# Power calculation for the primary outcome testing the binary predictor variable,
-# alpha diversity, at significantly stratifying overall survival across all study participants
+/* Power calculation for the primary outcome testing the binary predictor variable,
+/* alpha diversity, at significantly stratifying overall survival across all study participants
 proc power;
    twosamplesurvival test=logrank
       curve("Control")   = (3):(0.35)
@@ -29,9 +29,9 @@ proc power;
 run;
 
 
-# Power calculation for the primary outcome testing the continuous predictor variable,
-# "6-minute walk test distance", at significantly correlating with overall survival
-# across all study participants
+/* Power calculation for the primary outcome testing the continuous predictor variable,
+/* "6-minute walk test distance", at significantly correlating with overall survival
+/* across all study participants
 
 proc power;
    coxreg
