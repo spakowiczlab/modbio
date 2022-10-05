@@ -7,32 +7,37 @@ output: html_document
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
-
+library(lme4)
+library(nlme)
+library(lmerTest)
+library(lmtest)
+library(nortest)
+library(readxl)
 library(tidyverse)
 ```
 
 # Load data
 
 ```{r}
-all.experiments <- read.csv("../data/2022-07-25_tumor-size_R-formatted.csv") %>%
-  mutate(microbiome.sample = ifelse(grepl("DL017", microbiome.sample), "DL017", "DL081")) %>%
+all.experiments <- read.csv("../data/2022-08-11_tumor-size_R-formatted.csv") %>%
   mutate(treatment.group = paste(treatment, microbiome.sample, sep = " x "))
 ```
 
 # Format
 
 ```{r}
-WCLC.data <- all.experiments %>%
+fitness.data <- all.experiments %>%
   filter(experiment %in% c("mimic2", "mimic3", "mimic8")) %>%
+  filter(microbiome.sample != "Saline") %>% 
   mutate(SPPB = ifelse(experiment == "mimic2", "Low", "High"),
          treatment = ifelse(grepl("PD1", treatment), "Anti-PD1", "IgG")) %>%
-  filter(microbiome.sample != "Saline") %>%
   mutate(SPPB = factor(SPPB)) %>%
   mutate(SPPB = fct_relevel(SPPB, "Low")) %>%
-  mutate(treatment = fct_relevel(treatment, "IgG"))
+  mutate(treatment = fct_relevel(treatment, "IgG")) %>%
+  mutate(days2 = days.from.injection^2) 
 
 
-linedat <- WCLC.data %>%
+linedat <- fitness.data %>%
   group_by(SPPB, treatment, days.from.injection) %>%
   mutate(days.from.injection = ifelse(SPPB == "High" &
                                         days.from.injection %in% c(14,15),
@@ -45,20 +50,20 @@ linedat <- WCLC.data %>%
          # confint.low = ifelse(confint.low < 0, 0, confint.low)
          trgrp = paste0(treatment, SPPB))
 
-boxdat <- WCLC.data %>%
+boxdat <- fitness.data %>%
   # group_by(SPPB, treatment) %>%
   # mutate(maxtime = max(days.from.injection)) %>%
   # ungroup()%>%
   # filter(days.from.injection == maxtime)
   filter(days.from.injection == 18)
 
-nmice <- WCLC.data %>%
+nmice <- fitness.data %>%
   select(SPPB, treatment, unique.mouse.id) %>%
   distinct() %>%
   group_by(SPPB, treatment) %>%
   tally()
 
-tumorfree <- WCLC.data %>%
+tumorfree <- fitness.data %>%
   mutate(days.from.injection = ifelse(SPPB == "High" &
                                         days.from.injection %in% c(14,15),
                                       14.5,
@@ -84,7 +89,7 @@ linedat %>%
                      name = "SPPB status") +
   scale_linetype(name = "Treatment") +
   theme_bw(base_size = 18)
-  ggsave("../figures/WCLC22_longitudinal-tumor-volume.png", 
+  ggsave("../figures/fitness_longitudinal-tumor-volume.png", 
          height = 6, width = 8)
 ```
 
@@ -97,7 +102,7 @@ boxdat %>%
                     values = c("red", "dodgerblue"),
                     name = "SPPB status") +
   theme_bw(base_size = 18)
-ggsave("../figures/WCLC22_boxplot_final-timepoint.png",
+ggsave("../figures/fitness_boxplot_final-timepoint.png",
        height = 6, width = 6)
 ```
 
@@ -111,11 +116,11 @@ tumorfree %>%
                     values = c("red", "dodgerblue"),
                     name = "SPPB status") +
   theme_bw()
-ggsave("../figures/WCLC22_percent-mice-tumorfree.png")
+ggsave("../figures/fitness_percent-mice-tumorfree.png")
 ```
 
 ```{r}
-WCLC.data %>%
+fitness.data %>%
   group_by(unique.mouse.id) %>%
   filter(days.from.injection == max(days.from.injection)) %>%
   mutate(tumor.free =  if_else(tumor.volume > 0, 
@@ -124,5 +129,14 @@ WCLC.data %>%
   group_by(treatment, SPPB) %>%
   summarize(frac.cured = sum(tumor.free) /length(tumor.free))
   
+```
+
+## Fitness Longitudinal Modeling
+
+```{r}
+m.1 <- lmer(tumor.volume ~ days.from.injection + days2 + treatment * SPPB + (1|unique.mouse.id),
+              data = fitness.data)
+summary(m.1)
+plot(m.1)
 ```
 
