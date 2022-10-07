@@ -1,0 +1,84 @@
+---
+title: "modbio PDL1 modeling"
+output: html_document
+date: '2022-10-07'
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)
+library(ordinal)
+library(broom)
+```
+# Load data
+
+```{r}
+key.microbe <- read.csv("T:/Labs/Presley/FITNESS-lung/Microbiome- Rebecca/key_fitness-microbe-clin.csv",
+                        stringsAsFactors = F)
+corr <- read.csv("T:/Labs/Presley/FITNESS-lung/Microbiome- Rebecca/CoRR5512FITNESSCalcu_DATA_2022-10-04_1152.csv", stringsAsFactors = F)
+colnames(corr)[1] <- "id"
+
+div <- read.csv("../data/OC_simpson-diversity.csv", stringsAsFactors = F)
+mics <- read.table("T:/Labs/Spakowicz/fitness/data/derived/merged_metaphlan_output.txt",
+                   header = T, sep = "\t")
+```
+
+# Format
+
+```{r}
+modelInputs <- function(){
+  mics.form <- mics %>%
+    column_to_rownames(var = "clade_name") %>%
+    select(-NCBI_tax_id) %>%
+    t() %>%
+    as.data.frame() %>%
+    rownames_to_column(var = "sequence.id")
+  
+  names(mics.form) <- make.names(names(mics.form))
+  micnames <- colnames(mics.form[,-1])
+  
+  tmp <- corr %>%
+    select(id, redcap_event_name, contains("pdl")) %>%
+    drop_na(pdl1_result) %>%
+    left_join(key.microbe) %>%
+    drop_na(sequence.id) %>%
+    mutate(pdl1_relabel = case_when(pdl1_result == 1 ~ "High",
+                                    pdl1_result == 2 ~ "Low",
+                                    pdl1_result == 3 ~ "Negative"),
+           pdl1_ord = fct_relevel(pdl1_relabel, "Negative", "Low", "High")) %>%
+    left_join(mics.form) %>%
+    drop_na(k__Archaea)
+  
+  checkvar <- unlist(lapply(micnames, function(x) var(tmp[[x]])))
+  names(checkvar) <- micnames
+  totest <- names(subset(checkvar, checkvar > 0))
+  
+  outls <- list(tmp, totest)
+  names(outls) <- c("ModDat", "mic.names")
+  
+  return(outls)
+}
+
+modelPDL1 <- function(){
+  modin <- modelInputs()
+  
+  tmp <- lapply(modin$mic.names, function(x) clm(formula = as.formula(paste("pdl1_ord ~", x)),
+                                          data = modin$ModDat,
+                                          link = "logit"
+                                          ) %>%
+                   tidy() %>%
+                  filter(term == x)) %>%
+    bind_rows()
+  
+  return(tmp)
+}
+```
+
+# Results
+
+```{r}
+pdl1.res <- modelPDL1()
+
+write.csv(pdl1.res, "../data/modelling_ordinal_pdl1.csv", row.names = F)
+```
