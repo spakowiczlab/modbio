@@ -48,11 +48,12 @@ modelInputs <- function(){
                                     pdl1_result == 3 ~ "Negative"),
            pdl1_ord = fct_relevel(pdl1_relabel, "Negative", "Low", "High")) %>%
     left_join(mics.form) %>%
-    drop_na(k__Archaea)
+    drop_na(k__Archaea) %>%
+    left_join(div)
   
   checkvar <- unlist(lapply(micnames, function(x) var(tmp[[x]])))
   names(checkvar) <- micnames
-  totest <- names(subset(checkvar, checkvar > 0))
+  totest <- c(names(subset(checkvar, checkvar > 0)), "Simpson.div")
   
   outls <- list(tmp, totest)
   names(outls) <- c("ModDat", "mic.names")
@@ -78,7 +79,8 @@ modelPDL1 <- function(){
 # Results
 
 ```{r}
-pdl1.res <- modelPDL1()
+pdl1.res <- modelPDL1() %>%
+  arrange(p.value)
 
 write.csv(pdl1.res, "../data/modelling_ordinal_pdl1.csv", row.names = F)
 ```
