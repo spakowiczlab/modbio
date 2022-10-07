@@ -1,0 +1,142 @@
+---
+title: "WCLC 2022"
+author: "Rebecca Hoyd"
+date: '2022-07-28'
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(lme4)
+library(nlme)
+library(lmerTest)
+library(lmtest)
+library(nortest)
+library(readxl)
+library(tidyverse)
+```
+
+# Load data
+
+```{r}
+all.experiments <- read.csv("../data/2022-08-11_tumor-size_R-formatted.csv") %>%
+  mutate(treatment.group = paste(treatment, microbiome.sample, sep = " x "))
+```
+
+# Format
+
+```{r}
+fitness.data <- all.experiments %>%
+  filter(experiment %in% c("mimic2", "mimic3", "mimic8")) %>%
+  filter(microbiome.sample != "Saline") %>% 
+  mutate(SPPB = ifelse(experiment == "mimic2", "Low", "High"),
+         treatment = ifelse(grepl("PD1", treatment), "Anti-PD1", "IgG")) %>%
+  mutate(SPPB = factor(SPPB)) %>%
+  mutate(SPPB = fct_relevel(SPPB, "Low")) %>%
+  mutate(treatment = fct_relevel(treatment, "IgG")) %>%
+  mutate(days2 = days.from.injection^2) 
+
+
+linedat <- fitness.data %>%
+  group_by(SPPB, treatment, days.from.injection) %>%
+  mutate(days.from.injection = ifelse(SPPB == "High" &
+                                        days.from.injection %in% c(14,15),
+                                      14.5,
+                                      days.from.injection)) %>%
+  summarise(mean.vol = mean(tumor.volume),
+            sd.vol = sqrt(var(tumor.volume))) %>%
+  mutate(confint.low = mean.vol - sd.vol,
+         confint.high = mean.vol + sd.vol,
+         # confint.low = ifelse(confint.low < 0, 0, confint.low)
+         trgrp = paste0(treatment, SPPB))
+
+boxdat <- fitness.data %>%
+  # group_by(SPPB, treatment) %>%
+  # mutate(maxtime = max(days.from.injection)) %>%
+  # ungroup()%>%
+  # filter(days.from.injection == maxtime)
+  filter(days.from.injection == 18)
+
+nmice <- fitness.data %>%
+  select(SPPB, treatment, unique.mouse.id) %>%
+  distinct() %>%
+  group_by(SPPB, treatment) %>%
+  tally()
+
+tumorfree <- fitness.data %>%
+  mutate(days.from.injection = ifelse(SPPB == "High" &
+                                        days.from.injection %in% c(14,15),
+                                      14.5,
+                                      days.from.injection)) %>%
+  group_by(days.from.injection, treatment, SPPB) %>%
+  mutate(notum = tumor.volume == 0) %>%
+  summarise(n.free = sum(notum)) %>%
+  left_join(nmice) %>%
+  mutate(percent.free = n.free/n)
+```
+
+# Plots
+
+```{r longitudinal line plot}
+linedat %>%
+  ggplot(aes(x = days.from.injection, y = mean.vol, color = SPPB, group = trgrp,
+             linetype = treatment)) +
+  geom_point() +
+  geom_line(lwd = 1) +
+  geom_errorbar(aes(ymin = confint.low, ymax = confint.high), lwd = 1) +
+  labs(x = "Days from tumor injection", y = "Mean tumor volume") +
+  scale_color_manual(breaks = c("High", "Low"), values = c("red", "dodgerblue"),
+                     name = "SPPB status") +
+  scale_linetype(name = "Treatment") +
+  theme_bw(base_size = 18)
+  ggsave("../figures/fitness_longitudinal-tumor-volume.png", 
+         height = 6, width = 8)
+```
+
+```{r final timepoint boxplot}
+boxdat %>%
+  ggplot(aes(x = treatment, y = tumor.volume, fill = SPPB)) +
+  geom_boxplot() +
+  labs(x = "Treatment", y = "Tumor volume") +
+  scale_fill_manual(breaks = c("High", "Low"),
+                    values = c("red", "dodgerblue"),
+                    name = "SPPB status") +
+  theme_bw(base_size = 18)
+ggsave("../figures/fitness_boxplot_final-timepoint.png",
+       height = 6, width = 6)
+```
+
+```{r barplot percent tumor free}
+tumorfree %>%
+  ggplot(aes(x = days.from.injection, y = percent.free, fill = SPPB)) +
+  facet_wrap(vars(treatment)) +
+  geom_col(position = "dodge") +
+  labs(x = "Days from injection", y = "Percent tumor free") +
+  scale_fill_manual(breaks = c("High", "Low"),
+                    values = c("red", "dodgerblue"),
+                    name = "SPPB status") +
+  theme_bw()
+ggsave("../figures/fitness_percent-mice-tumorfree.png")
+```
+
+```{r}
+fitness.data %>%
+  group_by(unique.mouse.id) %>%
+  filter(days.from.injection == max(days.from.injection)) %>%
+  mutate(tumor.free =  if_else(tumor.volume > 0, 
+                                   true = 0, 
+                                   false = 1)) %>%
+  group_by(treatment, SPPB) %>%
+  summarize(frac.cured = sum(tumor.free) /length(tumor.free))
+  
+```
+
+## Fitness Longitudinal Modeling
+
+```{r}
+m.1 <- lmer(tumor.volume ~ days.from.injection + days2 + treatment * SPPB + (1|unique.mouse.id),
+              data = fitness.data)
+summary(m.1)
+plot(m.1)
+```
+
