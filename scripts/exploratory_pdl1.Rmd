@@ -22,6 +22,7 @@ colnames(corr)[1] <- "id"
 div <- read.csv("../data/OC_simpson-diversity.csv", stringsAsFactors = F)
 mics <- read.table("T:/Labs/Spakowicz/fitness/data/derived/merged_metaphlan_output.txt",
                    header = T, sep = "\t")
+recist <- read.csv("../data/RECIST.csv", stringsAsFactors = F) 
 ```
 
 # Format
@@ -49,7 +50,11 @@ modelInputs <- function(){
            pdl1_ord = fct_relevel(pdl1_relabel, "Negative", "Low", "High")) %>%
     left_join(mics.form) %>%
     drop_na(k__Archaea) %>%
-    left_join(div)
+    left_join(div) %>%
+    mutate(patient.id = as.character(patient.id)) %>%
+    left_join(recist) %>%
+    drop_na(RECIST_month3) %>%
+    mutate(r.nr = ifelse(RECIST_month3 %in% c("CR", "PR"), 1, 0))
   
   checkvar <- unlist(lapply(micnames, function(x) var(tmp[[x]])))
   names(checkvar) <- micnames
@@ -63,24 +68,34 @@ modelInputs <- function(){
 
 modelPDL1 <- function(){
   modin <- modelInputs()
-  
-  tmp <- lapply(modin$mic.names, function(x) clm(formula = as.formula(paste("pdl1_ord ~", x)),
+
+  tmp <- lapply(modin$mic.names, function(x) glm(formula = as.formula(paste("r.nr ~ pdl1_ord +", x)),
                                           data = modin$ModDat,
-                                          link = "logit"
+                                          family = "binomial"
                                           ) %>%
                    tidy() %>%
                   filter(term == x)) %>%
     bind_rows()
-  
+
   return(tmp)
 }
 ```
 
 # Results
 
+
+```{r}
+modin <- modelInputs()
+
+pdl1.only <- glm(r.nr ~ pdl1_ord, data = modin$ModDat, family = "binomial")
+summary(pdl1.only)
+
+pdl1.div <- glm(r.nr ~ pdl1_ord + Simpson.div, data = modin$ModDat, family = "binomial")
+summary(pdl1.div)
+```
 ```{r}
 pdl1.res <- modelPDL1() %>%
   arrange(p.value)
 
-write.csv(pdl1.res, "../data/modelling_ordinal_pdl1.csv", row.names = F)
+write.csv(pdl1.res, "../data/modelling_response_pdl1.csv", row.names = F)
 ```
