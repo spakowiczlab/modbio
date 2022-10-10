@@ -34,7 +34,10 @@ fitness.data <- all.experiments %>%
   mutate(SPPB = factor(SPPB)) %>%
   mutate(SPPB = fct_relevel(SPPB, "Low")) %>%
   mutate(treatment = fct_relevel(treatment, "IgG")) %>%
-  mutate(days2 = days.from.injection^2) 
+  mutate(days2 = days.from.injection^2) %>%
+  mutate(Response = if_else(grepl("Low", SPPB),
+                            true = "Non-responder",
+                            false = "Responder"))
 
 
 linedat <- fitness.data %>%
@@ -138,5 +141,71 @@ m.1 <- lmer(tumor.volume ~ days.from.injection + days2 + treatment * SPPB + (1|u
               data = fitness.data)
 summary(m.1)
 plot(m.1)
+```
+
+```{r}
+m2 <- lmer(tumor.volume ~ days.from.injection + days2 * treatment * SPPB + (1|unique.mouse.id),
+              data = fitness.data)
+
+tidy(m2)
+
+```
+
+
+```{r}
+lrtest(m.1, m2)
+
+```
+
+```{r}
+m3 <- lmer(tumor.volume ~ days.from.injection + days2 * treatment * SPPB + (1|unique.mouse.id),
+              data = fitness.data)
+
+tidy(m2)
+```
+
+# Described by Response 
+
+```{r}
+linedat <- fitness.data %>%
+  group_by(Response, treatment, days.from.injection) %>%
+  mutate(days.from.injection = ifelse(Response == "Responder" &
+                                        days.from.injection %in% c(14,15),
+                                      14.5,
+                                      days.from.injection)) %>%
+  summarise(mean.vol = mean(tumor.volume),
+            sd.vol = sqrt(var(tumor.volume))) %>%
+  mutate(confint.low = mean.vol - sd.vol,
+         confint.high = mean.vol + sd.vol,
+         # confint.low = ifelse(confint.low < 0, 0, confint.low)
+         trgrp = paste0(treatment, Response))
+
+linedat %>%
+  ggplot(aes(x = days.from.injection, y = mean.vol, color = Response, group = trgrp,
+             linetype = treatment)) +
+  geom_point() +
+  geom_line(lwd = 1) +
+  geom_errorbar(aes(ymin = confint.low, ymax = confint.high), lwd = 1) +
+  labs(x = "Days from tumor injection", y = "Mean tumor volume") +
+  scale_color_manual(breaks = c("Responder", "Non-responder"), values = c("red", "dodgerblue"),
+                     name = "Response") +
+  scale_linetype(name = "Treatment") +
+  theme_bw(base_size = 18)
+  ggsave("../figures/fitness_longitudinal-tumor-volume_RvNR.png", 
+         height = 4, width = 6)
+```
+
+```{r}
+fitness.data %>%
+  filter(days.from.injection == 18) %>%
+  ggplot(aes(x = treatment, y = tumor.volume, fill = Response)) +
+  geom_boxplot() +
+  labs(x = "Treatment", y = "Tumor volume") +
+  scale_fill_manual(breaks = c("Responder", "Non-responder"), 
+                    values = c("red", "dodgerblue"),
+                    name = "Response") +
+  theme_bw(base_size = 18)
+ggsave("../figures/fitness_boxplot_final-timepoint_RvNR.png",
+       height = 4, width = 6)
 ```
 
