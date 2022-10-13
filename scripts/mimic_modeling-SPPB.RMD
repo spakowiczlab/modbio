@@ -14,6 +14,8 @@ library(lmtest)
 library(nortest)
 library(readxl)
 library(tidyverse)
+library(broom)
+library(broom.mixed)
 ```
 
 # Load data
@@ -186,7 +188,7 @@ linedat %>%
   geom_point() +
   geom_line(lwd = 1) +
   geom_errorbar(aes(ymin = confint.low, ymax = confint.high), lwd = 1) +
-  labs(x = "Days from tumor injection", y = "Mean tumor volume") +
+  labs(x = "Days from tumor injection", y = expression("Tumor volume ("~mm^3~")")) +
   scale_color_manual(breaks = c("Responder", "Non-responder"), values = c("red", "dodgerblue"),
                      name = "Response") +
   scale_linetype(name = "Treatment") +
@@ -200,7 +202,8 @@ fitness.data %>%
   filter(days.from.injection == 18) %>%
   ggplot(aes(x = treatment, y = tumor.volume, fill = Response)) +
   geom_boxplot() +
-  labs(x = "Treatment", y = "Tumor volume") +
+  labs(x = "Treatment", 
+       y = expression("Tumor volume ("~mm^3~")"))  +
   scale_fill_manual(breaks = c("Responder", "Non-responder"), 
                     values = c("red", "dodgerblue"),
                     name = "Response") +
