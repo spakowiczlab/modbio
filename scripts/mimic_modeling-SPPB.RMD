@@ -199,7 +199,8 @@ linedat %>%
 ```
 
 ```{r}
-fitness.data %>%
+p <- 
+  fitness.data %>%
   filter(days.from.injection == 18) %>%
   ggplot(aes(x = treatment, y = tumor.volume, fill = Response)) +
   geom_boxplot() +
@@ -209,9 +210,19 @@ fitness.data %>%
                     values = c("red", "dodgerblue"),
                     name = "Response") +
   theme_bw(base_size = 18)
+p
 ggsave("../figures/fitness_boxplot_final-timepoint_RvNR.png",
        height = 4, width = 6)
 ```
+
+```{r}
+p + 
+  scale_fill_brewer(palette = "Set1")
+
+ggsave("../figures/aacrac22-poster_fitness_boxplot_final-timepoint_RvNR.png",
+       height = 6, width = 7)
+```
+
 
 Incorporating control data from the Phelps lab
 
