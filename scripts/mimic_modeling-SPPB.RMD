@@ -16,6 +16,7 @@ library(readxl)
 library(tidyverse)
 library(broom)
 library(broom.mixed)
+library(pzfx)
 ```
 
 # Load data
@@ -210,5 +211,38 @@ fitness.data %>%
   theme_bw(base_size = 18)
 ggsave("../figures/fitness_boxplot_final-timepoint_RvNR.png",
        height = 4, width = 6)
+```
+
+Incorporating control data from the Phelps lab
+
+```{r}
+c <- pzfx::read_pzfx("../data/20211208_DSMC38_aPD1_Tumor_Volume.pzfx") %>%
+  mutate(date = as.Date(Days, format = "%d-%b-%y"))
+
+cl <- 
+c %>%
+  select(-Days) %>%
+  gather(-date, key = "mouse", value = "volume") %>%
+  group_by(mouse) %>%
+  mutate(days = date - min(date)) %>%
+  mutate(Treatment = if_else(grepl("PD1", mouse),
+                               true = "PD1",
+                               false = "IgG"))
+
+cl
+```
+```{r}
+cl %>%
+  ggplot(aes(x = days, y = volume)) +
+  geom_line(aes(group = mouse, color = Treatment), alpha = 0.1) +
+  geom_smooth(aes(color = Treatment)) +
+  theme_bw()
+```
+
+```{r}
+cl %>%
+  filter(days == max(days)) %>%
+  ggplot(aes(x = Treatment, y = volume)) +
+  geom_boxplot()
 ```
 
