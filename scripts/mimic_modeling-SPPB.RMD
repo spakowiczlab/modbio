@@ -183,7 +183,7 @@ linedat <- fitness.data %>%
          # confint.low = ifelse(confint.low < 0, 0, confint.low)
          trgrp = paste0(treatment, Response))
 
-linedat %>%
+p1 <- linedat %>%
   ggplot(aes(x = days.from.injection, y = mean.vol, color = Response, group = trgrp,
              linetype = treatment)) +
   geom_point() +
@@ -194,12 +194,25 @@ linedat %>%
                      name = "Response") +
   scale_linetype(name = "Treatment") +
   theme_bw(base_size = 18)
+
+p1
   ggsave("../figures/fitness_longitudinal-tumor-volume_RvNR.png", 
          height = 4, width = 6)
 ```
 
 ```{r}
-p <- 
+p1 +
+  scale_color_brewer(palette = "Set1")
+
+p1
+
+ggsave("../figures/aacrac22-poster_fitness_longitudinal-tumor-volume_RvNR.png",
+       height = 6, width = 7)
+```
+
+
+```{r}
+p2 <- 
   fitness.data %>%
   filter(days.from.injection == 18) %>%
   ggplot(aes(x = treatment, y = tumor.volume, fill = Response)) +
@@ -210,13 +223,13 @@ p <-
                     values = c("red", "dodgerblue"),
                     name = "Response") +
   theme_bw(base_size = 18)
-p
+p2
 ggsave("../figures/fitness_boxplot_final-timepoint_RvNR.png",
        height = 4, width = 6)
 ```
 
 ```{r}
-p + 
+p2 + 
   scale_fill_brewer(palette = "Set1")
 
 ggsave("../figures/aacrac22-poster_fitness_boxplot_final-timepoint_RvNR.png",
