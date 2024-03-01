@@ -1,0 +1,171 @@
+---
+title: "Response by microbes check age"
+author: "Rebecca Hoyd"
+date: "2024-03-01"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)
+library(glmm)
+library(umap)
+library(rlist)
+library(broom)
+```
+
+# Load data
+
+```{r}
+# load("../data/mitox/microbiome.rds")
+load("../data/mitox/clinical.rds")
+load("../data/mitox/taxonomy.rds")
+mitox.key <- read.csv("../data/mitox/mitox_sample_matching.csv")
+
+fitness.key <- read.csv("../data/fitness/clinical_minimal-matched-info.csv")
+fitness.resp <- read.csv("../data/fitness/RECIST.csv")
+fitness.mics <- read.table("T:/Labs/Spakowicz/fitness/data/derived/merged_metaphlan_output.txt", sep = "\t", header = T)
+fitness.clin <- read.csv("T:/Labs/Presley/FITNESS-lung/Microbiome- Rebecca/CoRR5512FITNESSCalcu_DATA_2023-09-15_1235.csv")
+```
+
+# Format clin - response and age category
+
+```{r}
+mitox.singlesamp <- mitox.key %>%
+  mutate(date = as.Date(Date.Sample.Collected)) %>%
+  group_by(record_id) %>%
+  filter(date == min(date))%>%
+  select(sample, record_id) %>%
+  ungroup()
+mitox.modjoin <- demographics %>%
+  select(`Patient Id`, Age, Category) %>%
+  rename("record_id" = "Patient Id") %>%
+  inner_join(mitox.singlesamp) %>%
+  mutate(age.stat = ifelse(Age < 65, "Y", "O"),
+         response = ifelse(Category %in% c("PR", "CR"), "R", "NR"), 
+         datset = "mitox")
+  
+fit.patiids <- fitness.clin %>%
+  select(id, sid_2, age) %>%
+  drop_na(sid_2) %>%
+  rename("patient.id" = "sid_2")
+
+fitness.singlesamp <- fitness.clin %>%
+  select(id, redcap_event_name) %>%
+  left_join(fit.patiids) %>%
+  inner_join(fitness.key) %>%
+  distinct()  %>%
+  mutate(patient.id = as.character(patient.id)) %>%
+  inner_join(fitness.resp) %>%
+  drop_na(RECIST_month3) %>%
+  mutate(age.stat = ifelse(age < 65, "Y", "O"),
+         response = ifelse(RECIST_month3 %in% c("PR", "CR"), "R", "NR"),
+         datset = "fitness",
+         sample = sequence.id,
+         nvis = row_number()) %>%
+  filter(nvis == min(nvis), .by = patient.id)
+
+modin.clinvars <- bind_rows(mitox.modjoin, fitness.singlesamp) %>%
+  select(sample, age.stat, response, datset)
+```
+
+# umap - check for clustering by dataset
+
+```{r}
+fitmic.join <- fitness.mics %>%
+  filter(grepl("s__", clade_name)) %>%
+  mutate(clade_name = str_remove(clade_name, ".*\\|")) %>%
+  select(-NCBI_tax_id)
+
+toxmic.join <- tax.tab %>%
+  select(sample, species, RelAbun) %>%
+  pivot_wider(names_from = species, values_from = RelAbun, values_fill = 0) %>%
+  column_to_rownames(var = "sample") %>%
+  t() %>%
+  as.data.frame() %>%
+  rownames_to_column(var = "clade_name")
+
+prcomp.in <- inner_join(fitmic.join, toxmic.join) %>%
+  select(any_of(c("clade_name",modin.clinvars$sample))) %>%
+  column_to_rownames(var = "clade_name") %>%
+  t() %>%
+  as.data.frame() 
+
+prin.vars <- unlist(lapply(prcomp.in, var))
+zvars <- names(subset(prin.vars, prin.vars == 0))
+
+prcomp.in <- prcomp.in %>%
+  select(-zvars)
+
+samp.datset <- as.data.frame(cbind(sample = rownames(prcomp.in))) %>%
+  mutate(datset = ifelse(sample %in% colnames(toxmic.join), "mitox", "fitness"))
+```
+
+```{r}
+pca.res <- prcomp(prcomp.in, scale. = T)
+
+umap.res <- umap(pca.res$x[,1:20])
+
+umap.df <- umap.res$layout %>%
+  as.data.frame() %>%
+  bind_cols(samp.datset)
+
+ggplot(umap.df, aes(x = V1, y = V2, color = datset)) +
+  geom_point()
+```
+
+
+# Model microbe responses
+
+```{r}
+modin <- prcomp.in %>%
+  rownames_to_column(var = "sample") %>%
+  inner_join(modin.clinvars) %>%
+  mutate(response.bin = ifelse(response == "R", 1, 0),
+         agestat.bin = ifelse(age.stat == "O", 1, 0))
+
+mics <- colnames(prcomp.in)
+```
+
+```{r}
+capture.models.univ <- function(outcome, lfun){
+  mods.list <- lapply(mics, function(x) try({glm(as.formula(paste0(outcome, " ~ `", x, "`")), family = lfun, data = modin) %>%
+                        tidy()})
+                      )
+                      
+  mods.list.clean <- list.clean(mods.list, function(x) is.null(x))
+  mods.df <- bind_rows(mods.list.clean)
+  return(mods.df)
+}
+```
+
+```{r}
+resp.res <- capture.models.univ("response.bin", "binomial") %>%
+  filter(term != "(Intercept)") %>%
+  arrange(p.value)
+
+write.csv(resp.res, "../data/modelling_microbes-response.csv", row.names = F)
+resp.mics <- resp.res$term[1:10]
+```
+
+# Boxplot microbes by age
+
+```{r}
+plotdat <- modin %>%
+  select(sample, age.stat, resp.mics) %>%
+  pivot_longer(resp.mics, names_to = "microbe", values_to = "RA") %>%
+  mutate(age.stat = fct_relevel(ifelse(age.stat == "Y", "Young", "Old"), "Young"),
+         microbe = str_replace_all(str_remove(microbe, "s__"), "_", "\n"),
+         microbe = fct_relevel(microbe, str_replace_all(str_remove(resp.mics, "s__"), "_", "\n")))
+
+plotdat %>%
+  ggplot(aes(x = age.stat, y = RA)) +
+  facet_wrap(vars(microbe), nrow = 2, scales = "free_y") +
+  geom_boxplot() +
+  labs(x = "Age group", y = "Relative abundance") +
+  theme_bw()
+ggsave("../figures/boxplots_microbe-age_top-response.png", width = 10, height = 6)
+```
+
+
