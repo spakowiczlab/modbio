@@ -13,6 +13,8 @@ library(glmm)
 library(umap)
 library(rlist)
 library(broom)
+
+source("calcMicroSig.R")
 ```
 
 # Load data
@@ -217,4 +219,27 @@ plotdat.tox %>%
 ggsave("../figures/boxplots_microbe-age_top-toxicity.png", width = 8, height = 6)
 ```
 
+# Microsig with tox results
+
+```{r}
+sigin <- prcomp.in %>%
+  rownames_to_column(var = "sample")
+  # pivot_longer(-sample, names_to = "microbe", values_to = "exo.ra")
+
+toxsig <- calcMicroSigScore(sigin, tox.mics[4:6], tox.mics[1:3])
+```
+
+```{r}
+toxi.clin <- modin.clinvars %>%
+  mutate(Age = ifelse(age.stat == "O", "Old", "Young")) %>%
+  left_join(toxsig)
+
+kruskal.test(toxi.clin$score, toxi.clin$Age)
+
+toxi.clin  %>%
+  ggplot(aes(x = age.stat, y = score)) +
+  geom_boxplot() +
+  theme_bw()
+ggsave("../figures/boxplot_toxsig-age.png")
+```
 
