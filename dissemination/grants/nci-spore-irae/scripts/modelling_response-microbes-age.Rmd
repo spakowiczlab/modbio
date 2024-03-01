@@ -32,6 +32,20 @@ fitness.clin <- read.csv("T:/Labs/Presley/FITNESS-lung/Microbiome- Rebecca/CoRR5
 # Format clin - response and age category
 
 ```{r}
+grabTox <- function(){
+  toxnest <- fitness.clin %>%
+    filter(redcap_repeat_instrument == "adverse_events_and_toxicities_new") %>%
+    select(id, redcap_event_name, tox_grade_new)
+  
+  tox.unnest <- toxnest %>%
+    group_by(id) %>%
+    summarise(tox_max_grade = max(tox_grade_new, na.rm = T)) %>%
+    mutate(tox_max_grade = ifelse(tox_max_grade == -Inf, NA, tox_max_grade))
+}
+
+```
+
+```{r}
 mitox.singlesamp <- mitox.key %>%
   mutate(date = as.Date(Date.Sample.Collected)) %>%
   group_by(record_id) %>%
@@ -39,7 +53,7 @@ mitox.singlesamp <- mitox.key %>%
   select(sample, record_id) %>%
   ungroup()
 mitox.modjoin <- demographics %>%
-  select(`Patient Id`, Age, Category) %>%
+  select(`Patient Id`, Age, Category, irAE) %>%
   rename("record_id" = "Patient Id") %>%
   inner_join(mitox.singlesamp) %>%
   mutate(age.stat = ifelse(Age < 65, "Y", "O"),
@@ -51,9 +65,13 @@ fit.patiids <- fitness.clin %>%
   drop_na(sid_2) %>%
   rename("patient.id" = "sid_2")
 
+fit.tox <- grabTox() %>%
+  mutate(irAE = ifelse(tox_max_grade >= 2, "Yes", "No"))
+
 fitness.singlesamp <- fitness.clin %>%
   select(id, redcap_event_name) %>%
   left_join(fit.patiids) %>%
+  left_join(fit.tox) %>%
   inner_join(fitness.key) %>%
   distinct()  %>%
   mutate(patient.id = as.character(patient.id)) %>%
@@ -67,7 +85,7 @@ fitness.singlesamp <- fitness.clin %>%
   filter(nvis == min(nvis), .by = patient.id)
 
 modin.clinvars <- bind_rows(mitox.modjoin, fitness.singlesamp) %>%
-  select(sample, age.stat, response, datset)
+  select(sample, age.stat, response, datset, irAE)
 ```
 
 # umap - check for clustering by dataset
@@ -123,7 +141,9 @@ modin <- prcomp.in %>%
   rownames_to_column(var = "sample") %>%
   inner_join(modin.clinvars) %>%
   mutate(response.bin = ifelse(response == "R", 1, 0),
-         agestat.bin = ifelse(age.stat == "O", 1, 0))
+         agestat.bin = ifelse(age.stat == "O", 1, 0),
+         tox.bin = ifelse(irAE == "Yes", 1, 0)
+         )
 
 mics <- colnames(prcomp.in)
 ```
@@ -149,6 +169,18 @@ write.csv(resp.res, "../data/modelling_microbes-response.csv", row.names = F)
 resp.mics <- resp.res$term[1:10]
 ```
 
+```{r}
+tox.res <- capture.models.univ("tox.bin", "binomial") %>%
+  filter(term != "(Intercept)") %>%
+  arrange(p.value)
+
+write.csv(tox.res, "../data/modelling_microbes-tox.csv", row.names = F)
+tox.mics <- tox.res %>%
+  filter(p.value < .1) %>%
+  arrange(estimate)
+tox.mics <- tox.mics$term
+```
+
 # Boxplot microbes by age
 
 ```{r}
@@ -166,6 +198,23 @@ plotdat %>%
   labs(x = "Age group", y = "Relative abundance") +
   theme_bw()
 ggsave("../figures/boxplots_microbe-age_top-response.png", width = 10, height = 6)
+```
+
+```{r}
+plotdat.tox <- modin %>%
+  select(sample, age.stat, tox.mics) %>%
+  pivot_longer(tox.mics, names_to = "microbe", values_to = "RA") %>%
+  mutate(age.stat = fct_relevel(ifelse(age.stat == "Y", "Young", "Old"), "Young"),
+         microbe = str_replace_all(str_remove(microbe, "s__"), "_", "\n"),
+         microbe = fct_relevel(microbe, str_replace_all(str_remove(tox.mics, "s__"), "_", "\n")))
+
+plotdat.tox %>%
+  ggplot(aes(x = age.stat, y = RA)) +
+  facet_wrap(vars(microbe), nrow = 2, scales = "free_y") +
+  geom_boxplot() +
+  labs(x = "Age group", y = "Relative abundance") +
+  theme_bw()
+ggsave("../figures/boxplots_microbe-age_top-toxicity.png", width = 8, height = 6)
 ```
 
 
