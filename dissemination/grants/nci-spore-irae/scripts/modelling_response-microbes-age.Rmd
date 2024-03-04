@@ -28,7 +28,7 @@ mitox.key <- read.csv("../data/mitox/mitox_sample_matching.csv")
 fitness.key <- read.csv("../data/fitness/clinical_minimal-matched-info.csv")
 fitness.resp <- read.csv("../data/fitness/RECIST.csv")
 fitness.mics <- read.table("T:/Labs/Spakowicz/fitness/data/derived/merged_metaphlan_output.txt", sep = "\t", header = T)
-fitness.clin <- read.csv("T:/Labs/Presley/FITNESS-lung/Microbiome- Rebecca/CoRR5512FITNESSCalcu_DATA_2023-09-15_1235.csv")
+
 ```
 
 # Format clin - response and age category
@@ -61,30 +61,40 @@ mitox.modjoin <- demographics %>%
   mutate(age.stat = ifelse(Age < 65, "Y", "O"),
          response = ifelse(Category %in% c("PR", "CR"), "R", "NR"), 
          datset = "mitox")
-  
-fit.patiids <- fitness.clin %>%
-  select(id, sid_2, age) %>%
-  drop_na(sid_2) %>%
-  rename("patient.id" = "sid_2")
+```
 
-fit.tox <- grabTox() %>%
-  mutate(irAE = ifelse(tox_max_grade >= 2, "Yes", "No"))
+```{r}
+# fitness.clin <- read.csv("T:/Labs/Presley/FITNESS-lung/Microbiome- Rebecca/CoRR5512FITNESSCalcu_DATA_2023-09-15_1235.csv")  
+# 
+# fit.patiids <- fitness.clin %>%
+#   select(id, sid_2, age) %>%
+#   drop_na(sid_2) %>%
+#   rename("patient.id" = "sid_2")
+# 
+# fit.tox <- grabTox() %>%
+#   mutate(irAE = ifelse(tox_max_grade >= 2, "Yes", "No"))
+# 
+# fitness.singlesamp <- fitness.clin %>%
+#   select(id, redcap_event_name) %>%
+#   left_join(fit.patiids) %>%
+#   left_join(fit.tox) %>%
+#   inner_join(fitness.key) %>%
+#   distinct()  %>%
+#   mutate(patient.id = as.character(patient.id)) %>%
+#   inner_join(fitness.resp) %>%
+#   drop_na(RECIST_month3) %>%
+#   mutate(age.stat = ifelse(age < 65, "Y", "O"),
+#          response = ifelse(RECIST_month3 %in% c("PR", "CR"), "R", "NR"),
+#          datset = "fitness",
+#          sample = sequence.id,
+#          nvis = row_number()) %>%
+#   filter(nvis == min(nvis), .by = patient.id)
+# 
+# save(fitness.singlesamp, file = "../data/clin_fitness-no-dates.rda")
+```
 
-fitness.singlesamp <- fitness.clin %>%
-  select(id, redcap_event_name) %>%
-  left_join(fit.patiids) %>%
-  left_join(fit.tox) %>%
-  inner_join(fitness.key) %>%
-  distinct()  %>%
-  mutate(patient.id = as.character(patient.id)) %>%
-  inner_join(fitness.resp) %>%
-  drop_na(RECIST_month3) %>%
-  mutate(age.stat = ifelse(age < 65, "Y", "O"),
-         response = ifelse(RECIST_month3 %in% c("PR", "CR"), "R", "NR"),
-         datset = "fitness",
-         sample = sequence.id,
-         nvis = row_number()) %>%
-  filter(nvis == min(nvis), .by = patient.id)
+```{r}
+load("../data/clin_fitness-no-dates.rda")
 
 modin.clinvars <- bind_rows(mitox.modjoin, fitness.singlesamp) %>%
   select(sample, age.stat, response, datset, irAE)
