@@ -1,0 +1,111 @@
+---
+title: "Trp catabolites boxplots"
+author: "Caroline Wheeler"
+date: "2024-08-01"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)
+library(ggpubr)
+```
+
+load data
+```{r}
+# mitox meta
+load("../data/mitox/clinical.rds")
+load("../data/mitox/microbiome_metadata.rds")
+
+# mitox taxa
+load("../data/mitox/microbiome.rds")
+
+# fitness meta 
+load("../data/clin_fitness-no-dates.rda")
+
+# fitness taxa 
+fitness.mics <- read.table("/Volumes/spakowicz//fitness/data/derived/merged_metaphlan_output.txt", sep = "\t", header = T)
+# fitness.mics <- read.table("T:/Labs/Spakowicz/fitness/data/derived/merged_metaphlan_output.txt", sep = "\t", header = T)
+```
+
+sample, age cat, irAE cat
+```{r}
+# get only baseline samps 
+mitox.samps <- mic.meta %>%
+  group_by(`Patient Id`) %>%
+  arrange(Days) %>%
+  filter(row_number()==1) %>%
+  select(sample, `Patient Id`) %>%
+  ungroup()
+  
+mitox <- demographics %>%
+  select(`Patient Id`, Age, Category, irAE) %>%
+  inner_join(mitox.samps) %>%
+   mutate(age.stat = ifelse(Age < 65, "Y", "O")) %>%
+  select(sample, age.stat, irAE)
+
+fitness <- fitness.singlesamp %>%
+  select(sample, age.stat, irAE)
+
+meta <- rbind(mitox, fitness)
+```
+
+combine taxa and filter to samples with info
+```{r}
+fit.tax <- fitness.mics %>%
+  select(-NCBI_tax_id) %>%
+  pivot_longer(!clade_name, names_to = "sample", values_to = "RelAbun") %>%
+  rename("Taxonomy" = clade_name)
+
+mit.tax <- mic %>%
+  pivot_longer(!Taxonomy, names_to = "sample", values_to = "RelAbun") 
+
+# should include 24 fitness + 44 mitox samples => 68 total...looks like 67
+# FF05466767 is missing
+taxa <- rbind(fit.tax, mit.tax) %>%
+    filter(sample %in% meta$sample)
+```
+
+get microbes of interest
+fitness only has Bifido
+mitox only has 3 samples with Lacto species 
+```{r}
+taxa.filt <- taxa %>%
+  filter(grepl("Lactobacillus_reuteri|Lactobacillus_johnsonii|g__Bifidobacterium", Taxonomy),
+         !grepl("s__Bifidobacterium", Taxonomy)) %>%
+  mutate(Taxonomy = gsub("(.*__\\s*(.*$))", "\\2", Taxonomy)) %>%
+  pivot_wider(id_cols = sample, names_from = Taxonomy, values_from = RelAbun, values_fill = 0) %>%
+  pivot_longer(!sample, values_to = "RelAbun", names_to = "Microbe") %>%
+  left_join(meta)
+
+taxa.filt$age.stat <- factor(taxa.filt$age.stat, levels = c("Y", "O"))
+```
+
+boxplots
+```{r}
+age.p <- taxa.filt %>%
+  ggplot(aes(x = age.stat, y = RelAbun, fill = age.stat)) +
+  geom_boxplot() +
+  facet_grid(~Microbe) +
+  theme_bw() +
+  xlab("Age") +
+  ylab("Abundance") +
+  theme(legend.position = "none")
+
+irae.p <- taxa.filt %>%
+  ggplot(aes(x = irAE, y = RelAbun, fill = irAE)) +
+  geom_boxplot() +
+  facet_grid(~Microbe) +
+  theme_bw() +
+  xlab("irAE") +
+  ylab("Abundance") +
+  theme(legend.position = "none")
+
+ggarrange(age.p,
+          irae.p,
+          ncol = 1)
+```
+
+
+
