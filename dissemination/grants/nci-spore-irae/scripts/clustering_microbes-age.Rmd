@@ -1,0 +1,141 @@
+---
+title: "cliuster visualization"
+author: "Caroline Wheeler"
+date: "2024-08-06"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)
+library(vegan)
+```
+
+load data
+```{r}
+# mitox meta
+load("../data/mitox/clinical.rds")
+load("../data/mitox/microbiome_metadata.rds")
+
+# mitox taxa
+load("../data/mitox/microbiome.rds")
+
+# fitness meta 
+load("../data/clin_fitness-no-dates.rda")
+
+# fitness taxa 
+fitness.mics <- read.table("/Volumes/spakowicz//fitness/data/derived/merged_metaphlan_output.txt", sep = "\t", header = T)
+# fitness.mics <- read.table("T:/Labs/Spakowicz/fitness/data/derived/merged_metaphlan_output.txt", sep = "\t", header = T)
+```
+
+sample, age cat, irAE cat
+```{r}
+# get only baseline samps 
+mitox.samps <- mic.meta %>%
+  group_by(`Patient Id`) %>%
+  arrange(Days) %>%
+  filter(row_number()==1) %>%
+  select(sample, `Patient Id`) %>%
+  ungroup()
+  
+mitox <- demographics %>%
+  select(`Patient Id`, Age, Category, irAE) %>%
+  inner_join(mitox.samps) %>%
+  select(sample, Age, irAE)
+
+fitness <- fitness.singlesamp %>%
+  rename("Age" = age) %>%
+  select(sample, Age, irAE)
+
+meta <- rbind(mitox, fitness)
+```
+
+```{r}
+fit.tax <- fitness.mics %>%
+  select(-NCBI_tax_id) %>%
+  pivot_longer(!clade_name, names_to = "sample", values_to = "RelAbun") %>%
+  rename("Taxonomy" = clade_name)
+
+mit.tax <- mic %>%
+  pivot_longer(!Taxonomy, names_to = "sample", values_to = "RelAbun") 
+
+# should include 24 fitness + 44 mitox samples => 68 total...looks like 67
+# FF05466767 is missing
+taxa <- rbind(fit.tax, mit.tax) %>%
+    filter(sample %in% meta$sample)
+```
+
+filter to genus level, pivot wide, fill 0 
+```{r}
+taxa <- taxa %>% 
+  filter(grepl("g__", Taxonomy) & !grepl("s__", Taxonomy)) %>%
+  mutate(Taxonomy = gsub("(.*__\\s*(.*$))", "\\2", Taxonomy)) %>%
+  pivot_wider(names_from = Taxonomy, values_from = RelAbun, values_fill = 0) %>%
+  arrange(sample) %>%
+  column_to_rownames("sample")
+
+meta <- meta %>%
+  filter(sample %in% rownames(taxa)) %>% 
+  arrange(sample)
+```
+
+pca
+```{r}
+pca.res <- prcomp(taxa)
+
+pca <- as.data.frame(pca.res$x) %>%
+  dplyr::select(PC1, PC2, PC3, PC4) %>%
+  rownames_to_column("sample") %>%
+  left_join(meta)
+```
+
+```{r}
+all.mds <- metaMDS(taxa)
+all.mds1 <- metaMDS(all.sites)
+
+data.scores <- as.data.frame(scores(all.mds)$sites)  
+data.scores$sample <- rownames(data.scores)  
+data.scores <- data.scores %>%
+  left_join(meta)
+
+
+data.scores %>%
+  ggplot(aes(x=NMDS1,y=NMDS2, color = Age)) +
+  geom_point() +
+  theme_bw() +
+  theme(legend.position = "top") +
+  sc
+```
+
+
+plot
+```{r}
+clrs <- hcl.colors(palette = "Zissou 1", n = 8)
+sc <- scale_colour_gradientn(colours = clrs, limits=c(27, 89))
+
+pca %>%
+  ggplot(aes(x = PC1, y = PC2, color = Age)) +
+  geom_point() +
+  theme_bw() +
+  theme(legend.position = "top") + 
+  sc
+
+ggsave("../figures/age-clustering.png", height = 3, width = 3)
+```
+
+# p-value from adonis 
+
+Variation explained is directly analogous to that of general linear models. With 
+a continuous variable, it acts like simple linear regression, where each point 
+is associated with its own "centroid" which is the best fit linear approximation.
+
+```{r}
+# these are equivalent 
+dist <- vegdist(taxa)
+adon <- adonis2(dist ~ meta$Age, permutations = 99, method = "euclidean")
+
+adon2 <- adonis2(taxa ~ meta$Age, permutations = 99, method = "euclidean")
+```
+
+

@@ -1,0 +1,176 @@
+---
+title: "irAE deseq2 - fitness + mitox"
+author: "Caroline Wheeler"
+date: "2024-08-06"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)
+library(DESeq2)
+```
+
+# Read in data 
+
+```{r}
+# mitox meta 
+load("../data/mitox/clinical.rds")
+load("../data/mitox/microbiome_metadata.rds")
+
+# mitox taxa
+load("../data/mitox/microbiome.rds")
+
+# fitness meta 
+load("../data/clin_fitness-no-dates.rda")
+
+# fitness taxa 
+fitness.mics <- read.table("/Volumes/spakowicz/fitness/data/derived/merged_metaphlan_output.txt", sep = "\t", header = T)
+```
+
+# Prepare data
+
+get baseline samples with irAE info
+```{r}
+# get only baseline samps 
+mitox.samps <- mic.meta %>%
+  group_by(`Patient Id`) %>%
+  arrange(Days) %>%
+  filter(row_number()==1) %>%
+  select(sample, `Patient Id`) %>%
+  ungroup()
+  
+mitox <- demographics %>%
+  select(`Patient Id`, Age, Category, irAE) %>%
+  inner_join(mitox.samps) %>%
+  select(sample, Age, irAE)
+
+fitness <- fitness.singlesamp %>%
+  dplyr::rename("Age" = age) %>%
+  select(sample, Age, irAE)
+
+meta <- rbind(mitox, fitness)
+```
+
+combine taxa data and split into levels
+```{r}
+fit.tax <- fitness.mics %>%
+  select(-NCBI_tax_id) %>%
+  pivot_longer(!clade_name, names_to = "sample", values_to = "RelAbun") %>%
+  dplyr::rename("Taxonomy" = clade_name)
+
+mit.tax <- mic %>%
+  pivot_longer(!Taxonomy, names_to = "sample", values_to = "RelAbun") 
+
+# should include 24 fitness + 44 mitox samples => 68 total...looks like 67
+# FF05466767 is missing
+taxa <- rbind(fit.tax, mit.tax) %>%
+  filter(sample %in% meta$sample,
+         grepl("s__", Taxonomy)) %>%
+  mutate(kingdom = gsub("(k__\\w+).*", "\\1", Taxonomy),
+           phylum = ifelse(grepl("p__", Taxonomy),gsub(".*(p__\\w+).*", "\\1", Taxonomy), NA),
+           order = ifelse(grepl("o__", Taxonomy),gsub(".*(o__\\w+).*", "\\1", Taxonomy), NA),
+           class = ifelse(grepl("c__", Taxonomy),gsub(".*(c__\\w+).*", "\\1", Taxonomy), NA),
+           family = ifelse(grepl("f__", Taxonomy),gsub(".*(f__\\w+).*", "\\1", Taxonomy), NA),
+           genus = ifelse(grepl("g__", Taxonomy),gsub(".*(g__\\w+).*", "\\1", Taxonomy), NA),
+           species = ifelse(grepl("s__", Taxonomy), gsub(".*(s__.*)", "\\1", Taxonomy), NA)) %>%
+  select(-Taxonomy) 
+
+# filter meta to 67 samples present in taxa data
+meta <- meta %>%
+  filter(sample %in% taxa$sample) %>%
+  column_to_rownames("sample")
+# smallest non-zero is 0.00051
+# multiplication factor is 1960.784
+```
+
+
+# Functions 
+prep input data and run deseq
+```{r}
+write_desd <- function(taxa, lev){
+  desd <- taxa %>%
+    mutate(count = round(RelAbun*1960.784)) %>%
+    dplyr::select("sample", all_of(lev), "count")
+  
+  desd <- desd %>%
+    add_count(sample, desd[[lev]], wt=count) %>%
+    dplyr::select(-"count", -"desd[[lev]]") %>%
+    distinct() %>%
+    spread(sample, n) %>%
+    remove_rownames() %>%
+    column_to_rownames(var = lev)
+  
+  desd[is.na(desd)] <- 0
+  
+  # remove rows with all zeroes
+  
+  desd <- desd[rowSums(desd[])>0,]
+
+  return(desd)
+}
+
+run_deseq <- function(desd, met, lev){
+  
+  # make sure sample order matches 
+  ord <- rownames(met)
+  desd <- desd[, ord]
+  
+  # define components 
+  dds <- DESeqDataSetFromMatrix(countData = desd,
+                                colData = met,
+                                design = ~ irAE)
+  
+  # factor levels are decided alphabetically
+  # logarithmic fold change log2(irAE no/irAE yes)
+  # so in this case irAE no = left, irAE yes = right
+  
+  dds <- DESeq(dds)
+  res <- results(dds)
+  
+  pd <- res$log2FoldChange
+  
+  resPlot <- data.frame(res) %>% mutate(threshold = padj < 0.05)
+  
+  resPlot$level <- lev
+  return(resPlot)
+}
+```
+
+get deseq input
+```{r}
+phyl <-  write_desd(taxa, "phylum")
+class <-  write_desd(taxa, "class")
+ord <-  write_desd(taxa, "order")
+fam <-  write_desd(taxa, "family")
+gen <-  write_desd(taxa, "genus")
+spec <-  write_desd(taxa, "species")
+```
+
+```{r, warning=F}
+phyl_rp <- run_deseq(phyl, meta, "phylum")
+clas_rp <- run_deseq(class, meta, "class")
+ord_rp <- run_deseq(ord, meta, "order")
+fam_rp <- run_deseq(fam, meta, "family")
+
+# had to add pseudo count of 1
+# I think this is necessary when one group contains all zeroes 
+# seems better to add pseudo count of 1 and make it less sensitive
+# vs. eliminating microbes only present in 1 group
+gen_rp <- run_deseq(gen+1, meta, "genus")
+spec_rp <- run_deseq(spec+1, meta, "species")
+```
+
+```{r}
+resPlot <- rbind(phyl_rp, clas_rp, ord_rp, fam_rp, gen_rp, spec_rp) %>%
+  rownames_to_column("microbe") %>%
+  mutate(irAEgroup = ifelse(log2FoldChange > 0, "Yes", "No"))
+```
+
+save output
+```{r}
+write.csv(resPlot, file = "../data/deseq2-irAE.csv", row.names = F)
+```
+
+

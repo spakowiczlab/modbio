@@ -1,0 +1,195 @@
+---
+title: "effect size AHR correlation"
+author: "Caroline Wheeler"
+date: "2024-08-06"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)
+library(readxl)
+library(ggplot2)
+library(rcartocolor)
+library(ggpubr)
+```
+
+read in deseq output, Ahr 
+```{r}
+# deseq2 output
+deseq <- read.csv("../data/deseq2-irAE.csv")
+
+# mitox meta 
+load("../data/mitox/microbiome_metadata.rds")
+load("../data/mitox/clinical.rds")
+
+# mitox blood 
+load("../data/mitox/blood.rds")
+
+# mitox taxa
+load("../data/mitox/microbiome.rds")
+
+# fitness meta 
+load("../data/clin_fitness-no-dates.rda")
+
+# fitness blood
+fit.blood <- readxl::read_xlsx("/Volumes/spakowicz/fitness/data/derived/RoskoPresley_NanostringJune2022.xlsx", sheet = 2, skip = 1)
+
+# fitness taxa
+fitness.mics <- read.table("/Volumes/spakowicz/fitness/data/derived/merged_metaphlan_output.txt", sep = "\t", header = T)
+```
+
+get top 5 from each group
+```{r}
+top.spec <- deseq %>%
+  filter(level == "species") %>% 
+  group_by(irAEgroup) %>%
+  slice_min(padj, n = 5) %>%
+  mutate(microbe = gsub("s__", "", microbe),
+         microbe = gsub("_", " ", microbe))
+```
+
+clean up meta data
+get samples included in deseq2 analysis (baseline), age
+```{r}
+# get only baseline samps 
+mitox.samps <- mic.meta %>%
+  group_by(`Patient Id`) %>%
+  arrange(Days) %>%
+  filter(row_number()==1) %>%
+  select(sample, `Patient Id`) %>%
+  ungroup()
+  
+mitox <- demographics %>%
+  select(`Patient Id`, Age, Category, irAE) %>%
+  inner_join(mitox.samps) %>%
+  select(sample, Age)
+
+fitness <- fitness.singlesamp %>%
+  dplyr::rename("Age" = age) %>%
+  select(sample, Age)
+
+meta <- rbind(mitox, fitness)
+```
+
+clean up microbiome data
+```{r}
+fit.tax <- fitness.mics %>%
+  select(-NCBI_tax_id) %>%
+  pivot_longer(!clade_name, names_to = "sample", values_to = "RelAbun") %>%
+  dplyr::rename("Taxonomy" = clade_name)
+
+mit.tax <- mic %>%
+  pivot_longer(!Taxonomy, names_to = "sample", values_to = "RelAbun") 
+
+# should include 24 fitness + 44 mitox samples => 68 total...looks like 67
+# FF05466767 is missing
+taxa <- rbind(fit.tax, mit.tax) %>%
+  filter(sample %in% meta$sample,
+         grepl("s__", Taxonomy)) %>%
+  mutate(kingdom = gsub("(k__\\w+).*", "\\1", Taxonomy),
+           phylum = ifelse(grepl("p__", Taxonomy),gsub(".*(p__\\w+).*", "\\1", Taxonomy), NA),
+           order = ifelse(grepl("o__", Taxonomy),gsub(".*(o__\\w+).*", "\\1", Taxonomy), NA),
+           class = ifelse(grepl("c__", Taxonomy),gsub(".*(c__\\w+).*", "\\1", Taxonomy), NA),
+           family = ifelse(grepl("f__", Taxonomy),gsub(".*(f__\\w+).*", "\\1", Taxonomy), NA),
+           genus = ifelse(grepl("g__", Taxonomy),gsub(".*(g__\\w+).*", "\\1", Taxonomy), NA),
+           species = ifelse(grepl("s__", Taxonomy), gsub(".*(s__.*)", "\\1", Taxonomy), NA)) %>%
+  select(sample, RelAbun, species) %>%
+  dplyr::rename("microbe" = species) %>%
+  mutate(microbe = gsub("s__", "", microbe),
+         microbe = gsub("_", " ", microbe)) %>%
+  filter(microbe %in% top.spec$microbe) %>%
+  pivot_wider(names_from = microbe, values_from = RelAbun, values_fill = 0)
+
+# filter meta to 67 samples present in taxa data
+meta <- meta %>%
+  filter(sample %in% taxa$sample)
+```
+
+clean up blood data
+```{r}
+fit.samp <- fitness.singlesamp %>%
+  mutate(SV = case_when(grepl("t_1", redcap_event_name) ~ "SV1",
+                        grepl("t_2", redcap_event_name) ~ "SV2",
+                        grepl("t_3", redcap_event_name) ~ "SV3",
+                        grepl("t_4", redcap_event_name) ~ "SV4")) %>%
+  select(sample, patient.id, SV, age, age.stat)
+
+fit.blood <- data.frame(t(fit.blood)) %>% 
+  tibble::rownames_to_column() %>% 
+  select(-X2) %>%
+  mutate(X1 = ifelse(is.na(X1), "SV", X1)) %>%
+  janitor::row_to_names(row_number = 1) %>%
+  dplyr::rename(patient.id = "Samples not in TruDiagnostic analysis") %>%
+  mutate(patient.id = ifelse(grepl("\\...", patient.id), NA, patient.id)) %>%
+  fill(patient.id) %>%
+  right_join(fit.samp) %>%
+  select(sample, AHR) %>%
+  filter(!is.na(AHR),
+         sample %in% meta$sample)
+
+mit.blood <- blood %>%
+  left_join(mic.meta) %>%
+  select(sample, AHR) %>%
+  filter(!is.na(AHR),
+         sample %in% meta$sample) 
+
+# only has 52 samples 
+blood <- rbind(mit.blood, fit.blood)
+```
+
+get correlation
+```{r}
+cor.input <- taxa %>%
+  left_join(meta) %>%
+  left_join(blood) %>%
+  column_to_rownames("sample") %>%
+  mutate(AHR = as.double(AHR))
+
+blood <- taxa %>%
+  left_join(blood) %>%
+  filter(!is.na(AHR))
+
+cor.res <- as.data.frame(cor(cor.input, method = "spearman", use="complete.obs")) %>%
+  select(AHR, Age) %>%
+  rownames_to_column("microbe") %>%
+  filter(microbe != "Age" & microbe != "AHR") %>%
+  pivot_longer(!microbe, names_to = "Feature", values_to = "Correlation") %>%
+  left_join(top.spec)
+```
+
+
+plot effect size 
+```{r}
+#798234,#a3ad62,#d0d3a2,#fdfbe4,#f0c6c3,#df91a3,#d46780
+
+top.spec %>%
+  ggplot(aes(x = log2FoldChange, y = reorder(microbe, log2FoldChange),  fill = irAEgroup)) +
+  geom_bar(stat = "identity") + 
+  scale_fill_manual(values = c("#a3ad62","#df91a3")) + 
+  theme_minimal() +
+  ylab("") +
+  xlab("Effect Size") +
+  theme(legend.position = "none") 
+
+ggsave("../figures/effectsize_irAE.png", height = 3, width = 4)
+
+cor.res %>%
+  ggplot(aes(x = Feature, y=reorder(microbe, log2FoldChange), fill=Correlation)) +
+  geom_tile() +
+  theme_minimal() +
+  theme(axis.title.y=element_blank(),
+        axis.text.y=element_blank(),
+        axis.ticks.y=element_blank(),
+        axis.text.x = element_text(angle = 40, hjust = 1, vjust = 1.2)) +
+  coord_equal() +
+  ylab("") +
+  xlab("") +
+  scale_fill_carto_c(name = "Correlation",
+                           type = "diverging", palette = "Geyser")
+
+ggsave("../figures/AHR-age-corr.png", height = 3, width = 2)
+```
+
+
