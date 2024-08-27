@@ -1,0 +1,54 @@
+<?xml version='1.0' encoding='UTF-8' ?>
+<svg xmlns='http://www.w3.org/2000/svg' xmlns:xlink='http://www.w3.org/1999/xlink' class='svglite' width='288.00pt' height='216.00pt' viewBox='0 0 288.00 216.00'>
+<defs>
+  <style type='text/css'><![CDATA[
+    .svglite line, .svglite polyline, .svglite polygon, .svglite path, .svglite rect, .svglite circle {
+      fill: none;
+      stroke: #000000;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      stroke-miterlimit: 10.00;
+    }
+    .svglite text {
+      white-space: pre;
+    }
+  ]]></style>
+</defs>
+<rect width='100%' height='100%' style='stroke: none; fill: none;'/>
+<defs>
+  <clipPath id='cpMC4wMHwyODguMDB8MC4wMHwyMTYuMDA='>
+    <rect x='0.00' y='0.00' width='288.00' height='216.00' />
+  </clipPath>
+</defs>
+<g clip-path='url(#cpMC4wMHwyODguMDB8MC4wMHwyMTYuMDA=)'>
+</g>
+<defs>
+  <clipPath id='cpMTE4LjgzfDI4Mi41Mnw1LjQ4fDE4NC4yNw=='>
+    <rect x='118.83' y='5.48' width='163.70' height='178.79' />
+  </clipPath>
+</defs>
+<g clip-path='url(#cpMTE4LjgzfDI4Mi41Mnw1LjQ4fDE4NC4yNw==)'>
+<polyline points='146.74,184.27 146.74,5.48 ' style='stroke-width: 0.53; stroke: #EBEBEB; stroke-linecap: butt;' />
+<polyline points='208.07,184.27 208.07,5.48 ' style='stroke-width: 0.53; stroke: #EBEBEB; stroke-linecap: butt;' />
+<polyline points='269.39,184.27 269.39,5.48 ' style='stroke-width: 0.53; stroke: #EBEBEB; stroke-linecap: butt;' />
+<polyline points='118.83,158.73 282.52,158.73 ' style='stroke-width: 1.07; stroke: #EBEBEB; stroke-linecap: butt;' />
+<polyline points='118.83,116.16 282.52,116.16 ' style='stroke-width: 1.07; stroke: #EBEBEB; stroke-linecap: butt;' />
+<polyline points='118.83,73.59 282.52,73.59 ' style='stroke-width: 1.07; stroke: #EBEBEB; stroke-linecap: butt;' />
+<polyline points='118.83,31.02 282.52,31.02 ' style='stroke-width: 1.07; stroke: #EBEBEB; stroke-linecap: butt;' />
+<polyline points='177.41,184.27 177.41,5.48 ' style='stroke-width: 1.07; stroke: #EBEBEB; stroke-linecap: butt;' />
+<polyline points='238.73,184.27 238.73,5.48 ' style='stroke-width: 1.07; stroke: #EBEBEB; stroke-linecap: butt;' />
+<rect x='126.27' y='139.57' width='112.46' height='38.31' style='stroke-width: 1.07; stroke: none; stroke-linecap: butt; stroke-linejoin: miter; fill: #A3AD62;' />
+<rect x='156.48' y='97.00' width='82.25' height='38.31' style='stroke-width: 1.07; stroke: none; stroke-linecap: butt; stroke-linejoin: miter; fill: #A3AD62;' />
+<rect x='238.73' y='11.86' width='36.35' height='38.31' style='stroke-width: 1.07; stroke: none; stroke-linecap: butt; stroke-linejoin: miter; fill: #DF91A3;' />
+<rect x='238.73' y='54.43' width='35.70' height='38.31' style='stroke-width: 1.07; stroke: none; stroke-linecap: butt; stroke-linejoin: miter; fill: #DF91A3;' />
+</g>
+<g clip-path='url(#cpMC4wMHwyODguMDB8MC4wMHwyMTYuMDA=)'>
+<text x='113.89' y='161.88' text-anchor='end' style='font-size: 8.80px;fill: #4D4D4D; font-family: "Arial";' textLength='89.98px' lengthAdjust='spacingAndGlyphs'>Lactobacillus salivarius</text>
+<text x='113.89' y='119.31' text-anchor='end' style='font-size: 8.80px;fill: #4D4D4D; font-family: "Arial";' textLength='51.83px' lengthAdjust='spacingAndGlyphs'>Tyzzerella sp</text>
+<text x='113.89' y='76.74' text-anchor='end' style='font-size: 8.80px;fill: #4D4D4D; font-family: "Arial";' textLength='86.10px' lengthAdjust='spacingAndGlyphs'>Megasphaera elsdenii</text>
+<text x='113.89' y='34.17' text-anchor='end' style='font-size: 8.80px;fill: #4D4D4D; font-family: "Arial";' textLength='95.35px' lengthAdjust='spacingAndGlyphs'>Bifidobacterium animalis</text>
+<text x='177.41' y='195.50' text-anchor='middle' style='font-size: 8.80px;fill: #4D4D4D; font-family: "Arial";' textLength='7.83px' lengthAdjust='spacingAndGlyphs'>-5</text>
+<text x='238.73' y='195.50' text-anchor='middle' style='font-size: 8.80px;fill: #4D4D4D; font-family: "Arial";' textLength='4.90px' lengthAdjust='spacingAndGlyphs'>0</text>
+<text x='200.67' y='208.09' text-anchor='middle' style='font-size: 11.00px; font-family: "Arial";' textLength='52.57px' lengthAdjust='spacingAndGlyphs'>Effect Size</text>
+</g>
+</svg>

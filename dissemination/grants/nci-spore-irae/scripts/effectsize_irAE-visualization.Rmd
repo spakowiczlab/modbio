@@ -47,7 +47,9 @@ top.spec <- deseq %>%
   group_by(irAEgroup) %>%
   slice_min(padj, n = 5) %>%
   mutate(microbe = gsub("s__", "", microbe),
-         microbe = gsub("_", " ", microbe))
+         microbe = gsub("_", " ", microbe)) %>%
+  # filter to subset
+  filter(grepl("Lactobacillus|Tyzzerella|Bifido|Megasphaera elsden", microbe))
 ```
 
 clean up meta data
@@ -173,7 +175,7 @@ top.spec %>%
   xlab("Effect Size") +
   theme(legend.position = "none") 
 
-ggsave("../figures/effectsize_irAE.png", height = 3, width = 4)
+ggsave("../figures/effectsize_irAE.svg", height = 3, width = 4)
 
 cor.res %>%
   ggplot(aes(x = Feature, y=reorder(microbe, log2FoldChange), fill=Correlation)) +
@@ -189,7 +191,7 @@ cor.res %>%
   scale_fill_carto_c(name = "Correlation",
                            type = "diverging", palette = "Geyser")
 
-ggsave("../figures/AHR-age-corr.png", height = 3, width = 2)
+ggsave("../figures/AHR-age-corr.svg", height = 3, width = 2)
 ```
 
 
